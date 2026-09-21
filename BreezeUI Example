@@ -1,0 +1,66 @@
+local BreezeUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/fontifye/stuff/refs/heads/main/boi"))()
+
+local Window = BreezeUI:CreateWindow({
+    Name = "BreezeUI",
+    Description = "New Components"
+})
+
+local Tab = Window:CreateTab("Main")
+
+Tab:Label({
+    Text = "Hello World"
+})
+
+Tab:Button({
+    Name = "Button",
+    Description = "Click me",
+    Callback = function()
+        print("Clicked")
+    end
+})
+
+Tab:Toggle({
+    Name = "Toggle",
+    Description = "Enable something",
+    Default = false,
+    Callback = function(Value)
+        print(Value)
+    end
+})
+
+Tab:Slider({
+    Name = "WalkSpeed",
+    Min = 16,
+    Max = 200,
+    Default = 16,
+    Rounding = 0,
+    Callback = function(Value)
+        print(Value)
+    end
+})
+
+Tab:Dropdown({
+    Name = "Dropdown",
+    Values = {"Option 1", "Option 2", "Option 3"},
+    Default = "Option 1",
+    Callback = function(Value)
+        print(Value)
+    end
+})
+
+Tab:MultiDropdown({
+    Name = "Multi Dropdown",
+    Values = {"A", "B", "C", "D"},
+    Default = {"A"},
+    Callback = function(Values)
+        print(table.concat(Values, ", "))
+    end
+})
+
+Tab:Textbox({
+    Name = "Textbox",
+    Placeholder = "Type something...",
+    Callback = function(Text)
+        print(Text)
+    end
+})
