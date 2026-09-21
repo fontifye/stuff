@@ -1079,18 +1079,30 @@ function BreezeUI:CreateWindow(options)
 			local default = tonumber(options.Default) or min
 			local step = tonumber(options.Rounding) or 1
 
+			-- Ensure step is always a positive number
+			if step <= 0 then
+				step = 1
+			end
+
 			if max <= min then
 				max = min + 1
 			end
 
 			local function roundValue(value)
 				value = math.clamp(value, min, max)
+				value = math.floor((value - min) / step + 0.5) * step + min
+				return math.clamp(value, min, max)
+			end
 
-				if step > 0 then
-					value = math.floor((value - min) / step + 0.5) * step + min
+			local function formatValue(value)
+				-- If step is a whole number, show as integer
+				if step >= 1 and step == math.floor(step) then
+					return tostring(math.floor(value + 0.5))
 				end
 
-				return math.clamp(value, min, max)
+				-- Otherwise limit decimals based on step size
+				local decimals = math.max(0, -math.floor(math.log10(step)))
+				return string.format("%." .. decimals .. "f", value)
 			end
 
 			sliderObject.Value = roundValue(default)
@@ -1188,7 +1200,7 @@ function BreezeUI:CreateWindow(options)
 
 				fill.Size = UDim2.new(percent, 0, 1, 0)
 				knob.Position = UDim2.new(percent, 0, 0.5, 0)
-				valueLabel.Text = tostring(value)
+				valueLabel.Text = formatValue(value)
 
 				if fireCallback and options.Callback then
 					options.Callback(value)
@@ -1200,7 +1212,7 @@ function BreezeUI:CreateWindow(options)
 
 				fill.Size = UDim2.new(percent, 0, 1, 0)
 				knob.Position = UDim2.new(percent, 0, 0.5, 0)
-				valueLabel.Text = tostring(sliderObject.Value)
+				valueLabel.Text = formatValue(sliderObject.Value)
 			end
 
 			function sliderObject:GetValue()
@@ -1308,15 +1320,20 @@ function BreezeUI:CreateWindow(options)
 			dropdownCorner.CornerRadius = UDim.new(0, 8)
 			dropdownCorner.Parent = dropdownButton
 
-			local list = Instance.new("Frame")
+			-- Dropdown list is parented to the card so it can extend below without being clipped
+			local list = Instance.new("ScrollingFrame")
 			list.Name = "DropdownList"
 			list.BackgroundColor3 = Color3.fromRGB(18, 17, 22)
 			list.BorderSizePixel = 0
-			list.Position = UDim2.new(0, 0, 1, 5)
-			list.Size = UDim2.new(1, 0, 0, 0)
+			list.Position = UDim2.new(0, 0, 1, 5) -- below the button
+			list.Size = UDim2.new(1, 0, 0, 0) -- will be set dynamically
 			list.Visible = false
 			list.ZIndex = 20
-			list.Parent = dropdownButton
+			list.ScrollBarThickness = 4
+			list.ScrollingDirection = Enum.ScrollingDirection.Y
+			list.CanvasSize = UDim2.new(0, 0, 0, 0)
+			list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+			list.Parent = card
 
 			local listCorner = Instance.new("UICorner")
 			listCorner.CornerRadius = UDim.new(0, 8)
@@ -1355,11 +1372,18 @@ function BreezeUI:CreateWindow(options)
 				end
 			end
 
+			local itemHeight = 30
+			local itemPadding = 3
+			local maxVisibleItems = 5
+			local maxHeight = maxVisibleItems * itemHeight
+				+ (maxVisibleItems - 1) * itemPadding
+				+ 10
+
 			for _, value in ipairs(values) do
 				local option = Instance.new("TextButton")
 				option.BackgroundColor3 = run
 				option.BorderSizePixel = 0
-				option.Size = UDim2.new(1, 0, 0, 30)
+				option.Size = UDim2.new(1, 0, 0, itemHeight)
 				option.FontFace = Default
 				option.Text = tostring(value)
 				option.TextColor3 = w
@@ -1377,9 +1401,27 @@ function BreezeUI:CreateWindow(options)
 				end)
 			end
 
+			local function updateListSize()
+				local totalHeight = #values * itemHeight
+					+ (#values - 1) * itemPadding
+					+ 10
+
+				list.Size = UDim2.new(
+					1,
+					0,
+					0,
+					math.min(totalHeight, maxHeight)
+				)
+			end
+
 			dropdownButton.MouseButton1Click:Connect(function()
 				open = not open
-				list.Visible = open
+				if open then
+					updateListSize()
+					list.Visible = true
+				else
+					list.Visible = false
+				end
 			end)
 
 			function dropdownObject:GetValue()
@@ -1463,7 +1505,8 @@ function BreezeUI:CreateWindow(options)
 			buttonCorner.CornerRadius = UDim.new(0, 8)
 			buttonCorner.Parent = button
 
-			local list = Instance.new("Frame")
+			-- Multi list parented to card for proper clipping
+			local list = Instance.new("ScrollingFrame")
 			list.Name = "MultiList"
 			list.BackgroundColor3 = Color3.fromRGB(18, 17, 22)
 			list.BorderSizePixel = 0
@@ -1471,7 +1514,11 @@ function BreezeUI:CreateWindow(options)
 			list.Size = UDim2.new(1, 0, 0, 0)
 			list.Visible = false
 			list.ZIndex = 20
-			list.Parent = button
+			list.ScrollBarThickness = 4
+			list.ScrollingDirection = Enum.ScrollingDirection.Y
+			list.CanvasSize = UDim2.new(0, 0, 0, 0)
+			list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+			list.Parent = card
 
 			local listCorner = Instance.new("UICorner")
 			listCorner.CornerRadius = UDim.new(0, 8)
@@ -1525,11 +1572,18 @@ function BreezeUI:CreateWindow(options)
 				end
 			end
 
+			local itemHeight = 30
+			local itemPadding = 3
+			local maxVisibleItems = 5
+			local maxHeight = maxVisibleItems * itemHeight
+				+ (maxVisibleItems - 1) * itemPadding
+				+ 10
+
 			for _, value in ipairs(values) do
 				local option = Instance.new("TextButton")
 				option.BackgroundColor3 = run
 				option.BorderSizePixel = 0
-				option.Size = UDim2.new(1, 0, 0, 30)
+				option.Size = UDim2.new(1, 0, 0, itemHeight)
 				option.FontFace = Default
 				option.TextColor3 = w
 				option.TextSize = 13
@@ -1569,9 +1623,27 @@ function BreezeUI:CreateWindow(options)
 
 			local open = false
 
+			local function updateListSize()
+				local totalHeight = #values * itemHeight
+					+ (#values - 1) * itemPadding
+					+ 10
+
+				list.Size = UDim2.new(
+					1,
+					0,
+					0,
+					math.min(totalHeight, maxHeight)
+				)
+			end
+
 			button.MouseButton1Click:Connect(function()
 				open = not open
-				list.Visible = open
+				if open then
+					updateListSize()
+					list.Visible = true
+				else
+					list.Visible = false
+				end
 			end)
 
 			function multiObject:GetValue()
