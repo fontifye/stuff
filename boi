@@ -55,6 +55,7 @@ function BreezeUI:CreateWindow(options)
 	frame.BorderSizePixel = 0
 	frame.Position = UDim2.fromScale(0.5, 0.5)
 	frame.Size = UDim2.new(0, 560, 0, 440)
+	frame.ClipsDescendants = false
 	frame.Parent = screengui
 
 	local sizeConstraint = Instance.new("UISizeConstraint")
@@ -685,6 +686,40 @@ function BreezeUI:CreateWindow(options)
 		function Tab:Select()
 			selectTab()
 		end
+
+		-- Shared overlay layer for dropdowns inside this tab
+		-- Parented to `frame` so it floats above everything and is not clipped.
+		local dropdownLayer = Instance.new("Frame")
+		dropdownLayer.Name = tabName .. "DropdownLayer"
+		dropdownLayer.BackgroundTransparency = 1
+		dropdownLayer.BorderSizePixel = 0
+		dropdownLayer.Size = UDim2.new(0, 0, 0, 0)
+		dropdownLayer.Position = UDim2.new(0, 0, 0, 0)
+		dropdownLayer.ZIndex = 30
+		dropdownLayer.ClipsDescendants = false
+		dropdownLayer.Visible = false
+		dropdownLayer.Parent = frame
+
+		local function closeAllDropdowns()
+			for _, child in ipairs(dropdownLayer:GetChildren()) do
+				if child:IsA("ScrollingFrame") then
+					child.Visible = false
+				end
+			end
+		end
+
+		-- Close dropdowns when the content scrolls
+		content:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+			closeAllDropdowns()
+		end)
+
+		-- Also close when tab changes
+		local originalSelect = selectTab
+		selectTab = function()
+			originalSelect()
+			closeAllDropdowns()
+		end
+		tabButton.MouseButton1Click:Connect(closeAllDropdowns)
 
 		----------------------------------------------------------------
 		-- BUTTON
@@ -1320,20 +1355,20 @@ function BreezeUI:CreateWindow(options)
 			dropdownCorner.CornerRadius = UDim.new(0, 8)
 			dropdownCorner.Parent = dropdownButton
 
-			-- Dropdown list is parented to the card so it can extend below without being clipped
+			-- The list is parented to the shared dropdown layer on `frame`
+			-- so it floats above every card and isn't clipped by the scrolling frame.
 			local list = Instance.new("ScrollingFrame")
 			list.Name = "DropdownList"
 			list.BackgroundColor3 = Color3.fromRGB(18, 17, 22)
 			list.BorderSizePixel = 0
-			list.Position = UDim2.new(0, 0, 1, 5) -- below the button
-			list.Size = UDim2.new(1, 0, 0, 0) -- will be set dynamically
+			list.Size = UDim2.new(0, 145, 0, 0)
 			list.Visible = false
-			list.ZIndex = 20
+			list.ZIndex = 40
 			list.ScrollBarThickness = 4
 			list.ScrollingDirection = Enum.ScrollingDirection.Y
 			list.CanvasSize = UDim2.new(0, 0, 0, 0)
 			list.AutomaticCanvasSize = Enum.AutomaticSize.Y
-			list.Parent = card
+			list.Parent = dropdownLayer
 
 			local listCorner = Instance.new("UICorner")
 			listCorner.CornerRadius = UDim.new(0, 8)
@@ -1389,7 +1424,7 @@ function BreezeUI:CreateWindow(options)
 				option.TextColor3 = w
 				option.TextSize = 13
 				option.AutoButtonColor = false
-				option.ZIndex = 21
+				option.ZIndex = 41
 				option.Parent = list
 
 				local optionCorner = Instance.new("UICorner")
@@ -1401,23 +1436,40 @@ function BreezeUI:CreateWindow(options)
 				end)
 			end
 
-			local function updateListSize()
+			local function updateListPositionAndSize()
 				local totalHeight = #values * itemHeight
 					+ (#values - 1) * itemPadding
 					+ 10
 
-				list.Size = UDim2.new(
-					1,
+				local finalHeight = math.min(totalHeight, maxHeight)
+
+				-- Position the list relative to the main frame so it sits
+				-- directly under the dropdown button.
+				local buttonAbs = dropdownButton.AbsolutePosition
+				local buttonSize = dropdownButton.AbsoluteSize
+				local frameAbs = frame.AbsolutePosition
+
+				list.Position = UDim2.new(
 					0,
+					buttonAbs.X - frameAbs.X,
 					0,
-					math.min(totalHeight, maxHeight)
+					buttonAbs.Y - frameAbs.Y + buttonSize.Y + 5
 				)
+
+				list.Size = UDim2.new(0, buttonSize.X, 0, finalHeight)
 			end
 
 			dropdownButton.MouseButton1Click:Connect(function()
 				open = not open
 				if open then
-					updateListSize()
+					-- Close any other open dropdown first
+					for _, child in ipairs(dropdownLayer:GetChildren()) do
+						if child:IsA("ScrollingFrame") and child ~= list then
+							child.Visible = false
+						end
+					end
+
+					updateListPositionAndSize()
 					list.Visible = true
 				else
 					list.Visible = false
@@ -1505,20 +1557,19 @@ function BreezeUI:CreateWindow(options)
 			buttonCorner.CornerRadius = UDim.new(0, 8)
 			buttonCorner.Parent = button
 
-			-- Multi list parented to card for proper clipping
+			-- Parent to shared dropdown layer
 			local list = Instance.new("ScrollingFrame")
 			list.Name = "MultiList"
 			list.BackgroundColor3 = Color3.fromRGB(18, 17, 22)
 			list.BorderSizePixel = 0
-			list.Position = UDim2.new(0, 0, 1, 5)
-			list.Size = UDim2.new(1, 0, 0, 0)
+			list.Size = UDim2.new(0, 145, 0, 0)
 			list.Visible = false
-			list.ZIndex = 20
+			list.ZIndex = 40
 			list.ScrollBarThickness = 4
 			list.ScrollingDirection = Enum.ScrollingDirection.Y
 			list.CanvasSize = UDim2.new(0, 0, 0, 0)
 			list.AutomaticCanvasSize = Enum.AutomaticSize.Y
-			list.Parent = card
+			list.Parent = dropdownLayer
 
 			local listCorner = Instance.new("UICorner")
 			listCorner.CornerRadius = UDim.new(0, 8)
@@ -1588,7 +1639,7 @@ function BreezeUI:CreateWindow(options)
 				option.TextColor3 = w
 				option.TextSize = 13
 				option.AutoButtonColor = false
-				option.ZIndex = 21
+				option.ZIndex = 41
 				option.Parent = list
 
 				local optionCorner = Instance.new("UICorner")
@@ -1623,23 +1674,37 @@ function BreezeUI:CreateWindow(options)
 
 			local open = false
 
-			local function updateListSize()
+			local function updateListPositionAndSize()
 				local totalHeight = #values * itemHeight
 					+ (#values - 1) * itemPadding
 					+ 10
 
-				list.Size = UDim2.new(
-					1,
+				local finalHeight = math.min(totalHeight, maxHeight)
+
+				local buttonAbs = button.AbsolutePosition
+				local buttonSize = button.AbsoluteSize
+				local frameAbs = frame.AbsolutePosition
+
+				list.Position = UDim2.new(
 					0,
+					buttonAbs.X - frameAbs.X,
 					0,
-					math.min(totalHeight, maxHeight)
+					buttonAbs.Y - frameAbs.Y + buttonSize.Y + 5
 				)
+
+				list.Size = UDim2.new(0, buttonSize.X, 0, finalHeight)
 			end
 
 			button.MouseButton1Click:Connect(function()
 				open = not open
 				if open then
-					updateListSize()
+					for _, child in ipairs(dropdownLayer:GetChildren()) do
+						if child:IsA("ScrollingFrame") and child ~= list then
+							child.Visible = false
+						end
+					end
+
+					updateListPositionAndSize()
 					list.Visible = true
 				else
 					list.Visible = false
