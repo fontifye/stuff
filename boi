@@ -149,6 +149,16 @@ function BreezeUI:CreateWindow(options)
 	dragHandle.InputBegan:Connect(beginDrag)
 	dragHandle.InputChanged:Connect(handleInput)
 
+	-- Global registry of all open dropdown repositioners, so window drag / scroll
+	-- can re-anchor every visible list no matter which tab it belongs to.
+	local openDropdownRefreshers = {}
+
+	local function refreshAllOpenDropdowns()
+		for _, fn in ipairs(openDropdownRefreshers) do
+			fn()
+		end
+	end
+
 	local f = Instance.new("Frame")
 	f.BackgroundTransparency = 1
 	f.Position = UDim2.new(1, -145, 0, 8)
@@ -683,7 +693,6 @@ function BreezeUI:CreateWindow(options)
 
 		-- Shared overlay layer for dropdowns inside this tab.
 		-- Parented to `frame` so it floats above everything and is not clipped.
-		-- NOTE: The layer itself is always Visible; individual lists toggle their own Visible.
 		local dropdownLayer = Instance.new("Frame")
 		dropdownLayer.Name = tabName .. "DropdownLayer"
 		dropdownLayer.BackgroundTransparency = 1
@@ -695,28 +704,33 @@ function BreezeUI:CreateWindow(options)
 		dropdownLayer.Visible = true
 		dropdownLayer.Parent = frame
 
-		local function closeAllDropdowns()
-			for _, child in ipairs(dropdownLayer:GetChildren()) do
-				if child:IsA("ScrollingFrame") then
-					child.Visible = false
-				end
+		-- Track currently open dropdown list + its position function
+		local openDropdown = nil      -- { list = ScrollingFrame, reposition = function }
+
+		local function closeOpenDropdown()
+			if openDropdown then
+				openDropdown.list.Visible = false
+				openDropdown = nil
 			end
 		end
 
-		-- Close dropdowns when the content scrolls
+		-- Reposition the open dropdown whenever the content scrolls.
+		-- This keeps it glued to its anchor button instead of disappearing.
 		content:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-			closeAllDropdowns()
+			if openDropdown and openDropdown.list.Visible then
+				openDropdown.reposition()
+			end
 		end)
 
-		-- Close dropdowns when the tab is switched
+		-- Hide the dropdown if the tab is switched away from
 		tabButton.MouseButton1Click:Connect(function()
 			selectTab()
-			closeAllDropdowns()
+			closeOpenDropdown()
 		end)
 
 		function Tab:Select()
 			selectTab()
-			closeAllDropdowns()
+			closeOpenDropdown()
 		end
 
 		----------------------------------------------------------------
@@ -939,7 +953,7 @@ function BreezeUI:CreateWindow(options)
 				toggleObject.Value = value
 				toggleObject.State = value
 
-					updateToggle()
+				updateToggle()
 
 				if options.Callback then
 					options.Callback(value)
@@ -1112,7 +1126,6 @@ function BreezeUI:CreateWindow(options)
 			local default = tonumber(options.Default) or min
 			local step = tonumber(options.Rounding) or 1
 
-			-- Ensure step is always a positive number
 			if step <= 0 then
 				step = 1
 			end
@@ -1128,12 +1141,10 @@ function BreezeUI:CreateWindow(options)
 			end
 
 			local function formatValue(value)
-				-- If step is a whole number, show as integer
 				if step >= 1 and step == math.floor(step) then
 					return tostring(math.floor(value + 0.5))
 				end
 
-				-- Otherwise limit decimals based on step size
 				local decimals = math.max(0, -math.floor(math.log10(step)))
 				return string.format("%." .. decimals .. "f", value)
 			end
@@ -1353,8 +1364,6 @@ function BreezeUI:CreateWindow(options)
 			dropdownCorner.CornerRadius = UDim.new(0, 8)
 			dropdownCorner.Parent = dropdownButton
 
-			-- The list is parented to the shared dropdown layer on `frame`
-			-- so it floats above every card and isn't clipped by the scrolling frame.
 			local list = Instance.new("ScrollingFrame")
 			list.Name = "DropdownList"
 			list.BackgroundColor3 = Color3.fromRGB(18, 17, 22)
@@ -1393,6 +1402,9 @@ function BreezeUI:CreateWindow(options)
 			local function close()
 				open = false
 				list.Visible = false
+				if openDropdown and openDropdown.list == list then
+					openDropdown = nil
+				end
 			end
 
 			local function select(value)
@@ -1441,8 +1453,6 @@ function BreezeUI:CreateWindow(options)
 
 				local finalHeight = math.min(totalHeight, maxHeight)
 
-				-- Position the list relative to the main frame so it sits
-				-- directly under the dropdown button.
 				local buttonAbs = dropdownButton.AbsolutePosition
 				local buttonSize = dropdownButton.AbsoluteSize
 				local frameAbs = frame.AbsolutePosition
@@ -1457,6 +1467,14 @@ function BreezeUI:CreateWindow(options)
 				list.Size = UDim2.new(0, buttonSize.X, 0, finalHeight)
 			end
 
+			-- Register this dropdown's repositioner in the global list so window
+			-- drag and other refresh events can re-anchor it.
+			table.insert(openDropdownRefreshers, function()
+				if list.Visible then
+					updateListPositionAndSize()
+				end
+			end)
+
 			dropdownButton.MouseButton1Click:Connect(function()
 				open = not open
 				if open then
@@ -1469,8 +1487,12 @@ function BreezeUI:CreateWindow(options)
 
 					updateListPositionAndSize()
 					list.Visible = true
+					openDropdown = {
+						list = list,
+						reposition = updateListPositionAndSize
+					}
 				else
-					list.Visible = false
+					close()
 				end
 			end)
 
@@ -1555,7 +1577,6 @@ function BreezeUI:CreateWindow(options)
 			buttonCorner.CornerRadius = UDim.new(0, 8)
 			buttonCorner.Parent = button
 
-			-- Parent to shared dropdown layer
 			local list = Instance.new("ScrollingFrame")
 			list.Name = "MultiList"
 			list.BackgroundColor3 = Color3.fromRGB(18, 17, 22)
@@ -1672,6 +1693,14 @@ function BreezeUI:CreateWindow(options)
 
 			local open = false
 
+			local function close()
+				open = false
+				list.Visible = false
+				if openDropdown and openDropdown.list == list then
+					openDropdown = nil
+				end
+			end
+
 			local function updateListPositionAndSize()
 				local totalHeight = #values * itemHeight
 					+ (#values - 1) * itemPadding
@@ -1693,6 +1722,12 @@ function BreezeUI:CreateWindow(options)
 				list.Size = UDim2.new(0, buttonSize.X, 0, finalHeight)
 			end
 
+			table.insert(openDropdownRefreshers, function()
+				if list.Visible then
+					updateListPositionAndSize()
+				end
+			end)
+
 			button.MouseButton1Click:Connect(function()
 				open = not open
 				if open then
@@ -1704,8 +1739,12 @@ function BreezeUI:CreateWindow(options)
 
 					updateListPositionAndSize()
 					list.Visible = true
+					openDropdown = {
+						list = list,
+						reposition = updateListPositionAndSize
+					}
 				else
-					list.Visible = false
+					close()
 				end
 			end)
 
@@ -1824,12 +1863,15 @@ function BreezeUI:CreateWindow(options)
 	local dragConnection = UserInputService.InputChanged:Connect(function(input)
 		if input == dragInput and dragging then
 			updateDrag(input)
+			-- Keep open dropdowns anchored while the window is being dragged
+			refreshAllOpenDropdowns()
 		end
 	end)
 
 	function Window:ResetPos()
 		frame.AnchorPoint = Vector2.new(0.5, 0.5)
 		frame.Position = UDim2.fromScale(0.5, 0.5)
+		refreshAllOpenDropdowns()
 	end
 
 	return Window
