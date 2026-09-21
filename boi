@@ -681,14 +681,9 @@ function BreezeUI:CreateWindow(options)
 			tween:Play()
 		end
 
-		tabButton.MouseButton1Click:Connect(selectTab)
-
-		function Tab:Select()
-			selectTab()
-		end
-
-		-- Shared overlay layer for dropdowns inside this tab
+		-- Shared overlay layer for dropdowns inside this tab.
 		-- Parented to `frame` so it floats above everything and is not clipped.
+		-- NOTE: The layer itself is always Visible; individual lists toggle their own Visible.
 		local dropdownLayer = Instance.new("Frame")
 		dropdownLayer.Name = tabName .. "DropdownLayer"
 		dropdownLayer.BackgroundTransparency = 1
@@ -697,7 +692,7 @@ function BreezeUI:CreateWindow(options)
 		dropdownLayer.Position = UDim2.new(0, 0, 0, 0)
 		dropdownLayer.ZIndex = 30
 		dropdownLayer.ClipsDescendants = false
-		dropdownLayer.Visible = false
+		dropdownLayer.Visible = true
 		dropdownLayer.Parent = frame
 
 		local function closeAllDropdowns()
@@ -713,13 +708,16 @@ function BreezeUI:CreateWindow(options)
 			closeAllDropdowns()
 		end)
 
-		-- Also close when tab changes
-		local originalSelect = selectTab
-		selectTab = function()
-			originalSelect()
+		-- Close dropdowns when the tab is switched
+		tabButton.MouseButton1Click:Connect(function()
+			selectTab()
+			closeAllDropdowns()
+		end)
+
+		function Tab:Select()
+			selectTab()
 			closeAllDropdowns()
 		end
-		tabButton.MouseButton1Click:Connect(closeAllDropdowns)
 
 		----------------------------------------------------------------
 		-- BUTTON
@@ -941,7 +939,7 @@ function BreezeUI:CreateWindow(options)
 				toggleObject.Value = value
 				toggleObject.State = value
 
-				updateToggle()
+					updateToggle()
 
 				if options.Callback then
 					options.Callback(value)
